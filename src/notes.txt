@@ -1,0 +1,7 @@
+
+FC TODO:
+--------
+
+Develop good state sensing and switching
+
+Measure fc batt via 

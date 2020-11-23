@@ -35,9 +35,12 @@ double LocalOrientationX = 0;
 double LocalOrientationY = 0;
 double LocalOrientationZ = 0;
 
+double accelX, accelY, accelZ;
+double gyroX, gyroY, gyroZ;
+
 int status;
 
-double kp = 0.015;
+double kp = 0.03;
 double ki = 0;
 double kd = 0;
 
@@ -47,6 +50,18 @@ double pwmZ, pwmY;
 double trueYOut, trueZOut;
 double SGR = 2.5;
 double cs, sn;
+
+enum FlightMode
+{
+  GROUND_IDLE = 1,
+  POWERED_FLIGHT = 2,
+  UNPOWERED_FLIGHT = 3,
+  BALLISTIC_DESCENT = 4,
+  CHUTE_DESCENT = 5,
+  GROUND_SAFE = 6
+};
+
+FlightMode currentMode = GROUND_IDLE;
 
 void servoHome()
 {
@@ -78,7 +93,20 @@ void setupIMU()
   while(!gyro.getDrdyStatus()) {}
 }
 
-void testIMU()
+void testAccel()
+{
+  accel.readSensor();
+
+  accelX = accel.getAccelX_mss();
+  accelY = accel.getAccelY_mss();
+  accelZ = accel.getAccelZ_mss();
+
+  Serial.print("Accel X: "); Serial.print(accelX); Serial.print("\t");
+  Serial.print("Accel Y: "); Serial.print(accelY); Serial.print("\t");
+  Serial.print("Accel Z: "); Serial.print(accelZ); Serial.print("\n");
+}
+
+void testGyro()
 {
   gyro.readSensor();
 
@@ -116,7 +144,7 @@ void stabilize(double dt)
   // Serial.print("ORE Y => "); Serial.print(LocalOrientationY); Serial.print("\n");
 
   pwmZ = zAxis.update(LocalOrientationZ, dt);
-  pwmY = yAxis.update(LocalOrientationZ, dt);
+  pwmY = yAxis.update(LocalOrientationY, dt);
 
   Serial.println(pwmZ);
   Serial.println(pwmY);
@@ -146,12 +174,21 @@ void setup() {
   delay(1000);
   servoHome();
   delay(1000);
-  lastMicros = micros();
+  accel.readSensor();
+  currentMode = GROUND_IDLE;
+  while(currentMode == GROUND_IDLE)
+  {
+    if(accelX >= 12)
+    {
+      currentMode = POWERED_FLIGHT;
+    }
+  }
+  lastMicros = micros();  
 }
 
 void loop() {
   currentMicros = micros();
   dt = ((double)(currentMicros - lastMicros) / 1000000.);
-  stabilize(dt);
+  testAccel();
   lastMicros = currentMicros;
 }
