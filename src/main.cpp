@@ -40,9 +40,9 @@ double gyroX, gyroY, gyroZ;
 
 int status;
 
-double kp = 0.03;
+double kp = 0.04;
 double ki = 0;
-double kd = 0;
+double kd = 0.002;
 
 PID zAxis = {kp, ki, kd, 0};
 PID yAxis = {kp, ki, kd, 0};
@@ -171,6 +171,7 @@ void setup() {
   servoZ.attach(37);
   servoY.attach(36);
   setupIMU();
+  
   delay(1000);
   servoHome();
   delay(1000);
