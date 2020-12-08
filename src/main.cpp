@@ -2,7 +2,9 @@
 #include <Servo.h>
 #include <Orientation.h>
 #include <pid.h>
-#include <Wire.h>
+#include <Wire.h> 
+#include <SD.h>
+#include <SPI.h>
 #include <BMI088.h>
 #include "Orientation.h"
 
@@ -10,6 +12,8 @@
 Bmi088Accel accel(Wire,0x19);
 Bmi088Gyro gyro(Wire,0x69);
 // ============ //
+
+const int chipSelect = BUILTIN_SDCARD;
 
 // Servo Hardware //
 Servo servoZ;
@@ -61,6 +65,34 @@ enum FlightMode
   GROUND_SAFE = 6
 };
 
+struct FlightData
+{
+  uint32_t time;
+
+  FlightMode state;
+
+  double gX;
+  double gY;
+  double gZ;
+
+  double aX;
+  double aY;
+  double aZ;
+
+  double yaw;
+  double pitch;
+  double roll;
+
+  double altitude;
+  
+  double battVoltage;
+
+  bool pyro1Cont : 1;
+  bool pyro2Cont : 1;
+
+  int DATA_ERROR;
+};
+
 FlightMode currentMode = GROUND_IDLE;
 
 void servoHome()
@@ -91,6 +123,19 @@ void setupIMU()
       while (1) {}
   }
   while(!gyro.getDrdyStatus()) {}
+}
+
+void setupSD()
+{
+  Serial.print("Initializing SD card...");
+  
+  // see if the card is present and can be initialized:
+  if (!SD.begin(chipSelect)) {
+    Serial.println("Card failed, or not present");
+    // don't do anything more:
+    return;
+  }
+  Serial.println("card initialized.");
 }
 
 void testAccel()
@@ -166,7 +211,8 @@ void stabilize(double dt)
   delay(40);
 }
 
-void setup() {
+void setup() 
+{
   Serial.begin(9600);
   servoZ.attach(37);
   servoY.attach(36);
@@ -176,18 +222,18 @@ void setup() {
   servoHome();
   delay(1000);
   accel.readSensor();
-  currentMode = GROUND_IDLE;
-  while(currentMode == GROUND_IDLE)
+  setupSD();
+  if(!SD.begin(chipSelect))
   {
-    if(accelX >= 12)
-    {
-      currentMode = POWERED_FLIGHT;
-    }
+
   }
-  lastMicros = micros();  
+
+  currentMode = GROUND_IDLE;
+  lastMicros = micros();
 }
 
-void loop() {
+void loop()
+{
   currentMicros = micros();
   dt = ((double)(currentMicros - lastMicros) / 1000000.);
   testAccel();
