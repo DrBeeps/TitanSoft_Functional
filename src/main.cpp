@@ -7,6 +7,7 @@
 #include <BMI088.h>
 #include "Orientation.h"
 
+#include "SD.h"
 #include "sd_data.h"
 
 // ==============================
@@ -14,6 +15,8 @@
 // ==============================
 
 const int chipSelect = BUILTIN_SDCARD;
+
+File sdDataLog;
 
 double flightAlt;
 double fcBatt;
@@ -149,6 +152,53 @@ bool initGyro()
   if(gyro.begin() < 0 || gyro.setRange(Bmi088Gyro::RANGE_1000DPS) < 0 || gyro.setOdr(Bmi088Gyro::ODR_2000HZ_BW_230HZ) < 0) return false;
 }
 
+void logHeaders(File dataLoggingFile)
+{
+  dataLoggingFile = SD.open("test.csv", FILE_WRITE);
+  if (dataLoggingFile) 
+  {
+    dataLoggingFile.print("Flight Time (Millis)"); dataLoggingFile.print(", "); dataLoggingFile.print("System State"); dataLoggingFile.print(", "); dataLoggingFile.print("Gyro X (rad/s)"); dataLoggingFile.print(", "); dataLoggingFile.print("Gyro Y (rad/s)"); dataLoggingFile.print(", "); dataLoggingFile.print("Gyro Z (rad/s)"); dataLoggingFile.print(", "); dataLoggingFile.print("Accel X (m/s^2)"); dataLoggingFile.print(", "); dataLoggingFile.print("Accel Y (m/s^2)"); dataLoggingFile.print(", "); dataLoggingFile.print("Accel Z (m/s^2)"); dataLoggingFile.print(", "); dataLoggingFile.print("Yaw (Deg)"); dataLoggingFile.print(", "); dataLoggingFile.print("Pitch (Deg)"); dataLoggingFile.print(", "); dataLoggingFile.print("Roll (Deg)"); dataLoggingFile.print(", "); dataLoggingFile.print("Altitude (Meters)"); dataLoggingFile.print(", "); dataLoggingFile.print("FC Batt"); dataLoggingFile.print(", "); dataLoggingFile.print("Pyro 1 Cont"); dataLoggingFile.print(", "); dataLoggingFile.print("Pyro 2 Cont"); dataLoggingFile.print(", "); dataLoggingFile.print("Data Error"); dataLoggingFile.println("");
+
+    dataLoggingFile.close();
+  } else 
+  {
+    Serial.println("error opening test.csv");
+  }
+}
+
+void logData(FlightData currentData)
+{
+  sdDataLog = SD.open("test.csv", FILE_WRITE);
+  
+  // if the file opened okay, write to it:
+  String flightDurationString = String(currentData.time);
+  String systemStateString = String(currentData.state);
+  String gXString = String(currentData.gX);
+  String gYString = String(currentData.gY);
+  String gZString = String(currentData.gZ);
+  String aXString = String(currentData.aX);
+  String aYString = String(currentData.aY);
+  String aZString = String(currentData.aZ);
+  String yawString = String(currentData.yaw);
+  String pitchString = String(currentData.pitch);
+  String rollString = String(currentData.roll);
+  String altString = String(currentData.altitude);
+  String fcBattString = String(currentData.battVoltage);
+  String pyro1ContString = String(currentData.pyro1Cont);
+  String pyro2ContString = String(currentData.pyro2Cont);
+  String dataErrorString = String(currentData.DATA_ERROR);
+
+  if (sdDataLog) 
+  {
+    sdDataLog.print(flightDurationString); sdDataLog.print(", "); sdDataLog.print(systemStateString); sdDataLog.print(", "); sdDataLog.print(gXString); sdDataLog.print(", "); sdDataLog.print(gYString); sdDataLog.print(", "); sdDataLog.print(gZString); sdDataLog.print(", "); sdDataLog.print(aXString); sdDataLog.print(", "); sdDataLog.print(aYString); sdDataLog.print(", "); sdDataLog.print(aZString); sdDataLog.print(", "); sdDataLog.print(yawString); sdDataLog.print(", "); sdDataLog.print(pitchString); sdDataLog.print(", "); sdDataLog.print(rollString); sdDataLog.print(", "); sdDataLog.print(altString); sdDataLog.print(", "); sdDataLog.print(fcBattString); sdDataLog.print(", "); sdDataLog.print(pyro1ContString); sdDataLog.print(", "); sdDataLog.print(pyro2ContString); sdDataLog.print(", "); sdDataLog.print(dataErrorString); sdDataLog.println("");
+
+    sdDataLog.close();
+  } else 
+  {
+    Serial.println("error opening test.csv");
+  }
+}
+
 void setup() 
 {
   Serial.begin(9600);
@@ -158,24 +208,25 @@ void setup()
   servoZ.attach(37);
   servoY.attach(36);
 
-  setupSD();
+  delay(1000);
 
-  while(!Serial) {}
+  setupSD();
+  logHeaders(sdDataLog);
 
   status = accel.begin();
 
   if (status < 0) 
   {
-      Serial.println("Accel Initialization Error");
-      Serial.println(status);
-      while (1) {}
+    Serial.println("Accel Initialization Error");
+    Serial.println(status);
+    while (1) {}
   }
   status = gyro.begin();
   if (status < 0) 
   {
-      Serial.println("Gyro Initialization Error");
-      Serial.println(status);
-      while (1) {}
+    Serial.println("Gyro Initialization Error");
+    Serial.println(status);
+    while (1) {}
   }
   while(!gyro.getDrdyStatus()) {}
 
@@ -183,9 +234,11 @@ void setup()
   delay(1000);
 
   currentMode = GROUND_IDLE;
-  // flightDurationTime = millis();
+
+  flightDurationTime = millis();
   lastMicros = micros();
 }
+
 
 void loop()
 {
@@ -195,7 +248,6 @@ void loop()
   //Serial.print("ORE Z"); Serial.print(LocalOrientationZ); Serial.print("\t");
   //Serial.print("ORE Y"); Serial.print(LocalOrientationY); Serial.print("\n");
 
-  
   gyro.readSensor();
   accel.readSensor();
 
@@ -208,25 +260,15 @@ void loop()
   
   LocalOrientationX = (gyroOut.roll * RAD_TO_DEG);
   LocalOrientationY = (gyroOut.pitch * RAD_TO_DEG);
-  LocalOrientationZ = (gyroOut.yaw * RAD_TO_DEG);
+  LocalOrientationZ = (gyroOut.yaw * RAD_TO_DEG); 
 
-
-  FlightData currentData = {flightDurationTime, currentMode, gyro.getGyroX_rads(), -gyro.getGyroY_rads(), -gyro.getGyroZ_rads(), accel.getAccelX_mss(), accel.getAccelY_mss(), accel.getAccelZ_mss(), LocalOrientationX, LocalOrientationY, LocalOrientationZ, flightAlt, fcBatt, pyro1Cont, pyro2Cont};
-
-  sdFlightData = SD.open("flightTestData.csv"); 
-  if (sdFlightData) {
-    Serial.println("flightTestData.csv");
-    
-    // read from the file until there's nothing else in it:
-    while (sdFlightData.available()) {
-    	Serial.write(sdFlightData.read());
-    }
-    // close the file:
-    sdFlightData.close();
-  } else {
-  	// if the file didn't open, print an error:
-    Serial.println("error opening flightTestData.csv");
-  }
+  FlightData currentData = {flightDurationTime, currentMode, gyro.getGyroX_rads(), -gyro.getGyroY_rads(), -gyro.getGyroZ_rads(), accel.getAccelX_mss(), accel.getAccelY_mss(), accel.getAccelZ_mss(), LocalOrientationX, LocalOrientationY, LocalOrientationZ, flightAlt, fcBatt, pyro1Cont, pyro2Cont, 0};
+ 
+  logData(currentData);
 
   lastMicros = currentMicros;
-}
+} 
+
+
+
+

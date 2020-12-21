@@ -20,7 +20,7 @@ enum FlightMode
 
 struct FlightData
 {
-  uint32_t time;
+  unsigned long time;
 
   FlightMode state;
 
@@ -45,3 +45,4 @@ struct FlightData
 
   int DATA_ERROR;
 };
+
