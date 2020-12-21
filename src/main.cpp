@@ -204,6 +204,7 @@ void setup()
   Serial.begin(9600);
 
   pinMode(pyro4, OUTPUT);
+  pinMode(A10, INPUT);
 
   servoZ.attach(37);
   servoY.attach(36);
@@ -262,9 +263,12 @@ void loop()
   LocalOrientationY = (gyroOut.pitch * RAD_TO_DEG);
   LocalOrientationZ = (gyroOut.yaw * RAD_TO_DEG); 
 
+  fcBatt = analogRead(A13) * 0.06025510204;
+
   FlightData currentData = {flightDurationTime, currentMode, gyro.getGyroX_rads(), -gyro.getGyroY_rads(), -gyro.getGyroZ_rads(), accel.getAccelX_mss(), accel.getAccelY_mss(), accel.getAccelZ_mss(), LocalOrientationX, LocalOrientationY, LocalOrientationZ, flightAlt, fcBatt, pyro1Cont, pyro2Cont, 0};
  
   logData(currentData);
+  
 
   lastMicros = currentMicros;
 } 
