@@ -3,37 +3,55 @@
 #include <Orientation.h>
 #include <pid.h>
 #include <Wire.h> 
-#include <SD.h>
 #include <SPI.h>
 #include <BMI088.h>
 #include "Orientation.h"
 
-#include "structs.h"
+#include "sd_data.h"
 
-
-// IMU Hardware //
-Bmi088Accel accel(Wire,0x19);
-Bmi088Gyro gyro(Wire,0x69);
-// ============ //
+// ==============================
+// SDCARD & DATA LOG
+// ==============================
 
 const int chipSelect = BUILTIN_SDCARD;
 
-// Servo Hardware //
+double flightAlt;
+double fcBatt;
+
+// ==============================
+// SERVO & PYROS
+// ==============================
+
 Servo servoZ;
 Servo servoY;
-// ============== //
 
-// Euler Angles & Quaternions //
-Orientation ori;
-EulerAngles gyroData;
-EulerAngles gyroOut;
-// ========================== //
+double SGR = 6; // the BPS Mount SGR is very high
 
-// Time //
+const int pyro4 = 33;
+
+bool pyro1Cont;
+bool pyro2Cont;
+
+// ==============================
+// GYROSCOPES & ACCELEROMETERS
+// ==============================
+
+Bmi088Accel accel(Wire,0x19);
+Bmi088Gyro gyro(Wire,0x69);
+
+int status;
+
+// ==============================
+// GNC
+// ==============================
+
 uint64_t lastMicros;
 uint64_t currentMicros;
 double dt;
-// ==== //
+
+Orientation ori;
+EulerAngles gyroData;
+EulerAngles gyroOut;
 
 double IMUValX = 0, IMUValY = 0, IMUValZ = 0; // raw offset values
 double IMUOffsetX = 0, IMUOffsetY = 0, IMUOffsetZ = 0; // final offset values
@@ -45,42 +63,16 @@ double LocalOrientationZ = 0;
 double accelX, accelY, accelZ;
 double gyroX, gyroY, gyroZ;
 
-double flightAlt;
-double fcBatt;
-bool pyro1Cont;
-const int pyro4 = 33;
-bool pyro2Cont;
-
-int status;
-
 double kp = 0.35;
 double ki = 0.095;
 double kd = 0.174;
-// gains tested by the flight simulation
 
 PID zAxis = {kp, ki, kd, 0};
 PID yAxis = {kp, ki, kd, 0};  
 double pwmZ, pwmY;
 double trueYOut, trueZOut;
-double SGR = 6; // the BPS Mount SGR is very high
 
 FlightMode currentMode = GROUND_IDLE;
-
-String timeString;
-String flightModeString;
-String gXString;
-String gYString;
-String gZString;
-String aXString;
-String aYString;
-String aZString;
-String yawString;
-String pitchString;
-String rollString;
-String altString;
-String battString;
-String py1String;
-String py2String;
 
 uint32_t flightDurationTime;
 
@@ -88,12 +80,19 @@ uint32_t flightDurationTime;
 
 File sdFlightData;
 
+// ==============================
+// UNTESTED FUNCTIONS
+// ==============================
+
+// ==============================
+// 
+// ==============================
+
 void servoHome()
 {
   servoZ.write(90);
   servoY.write(90);
 }
-
 
 void setupSD()
 {
@@ -192,8 +191,42 @@ void loop()
 {
   currentMicros = micros();
   dt = ((double)(currentMicros - lastMicros) / 1000000.);
-  stabilize(dt);
-  Serial.print("ORE Z"); Serial.print(LocalOrientationZ); Serial.print("\t");
-  Serial.print("ORE Y"); Serial.print(LocalOrientationY); Serial.print("\n");
+  //stabilize(dt);
+  //Serial.print("ORE Z"); Serial.print(LocalOrientationZ); Serial.print("\t");
+  //Serial.print("ORE Y"); Serial.print(LocalOrientationY); Serial.print("\n");
+
+  
+  gyro.readSensor();
+  accel.readSensor();
+
+  gyroData.roll = (gyro.getGyroX_rads());
+  gyroData.pitch = (-gyro.getGyroY_rads());
+  gyroData.yaw = (-gyro.getGyroZ_rads());
+
+  ori.update(gyroData, dt);
+  gyroOut = ori.toEuler();
+  
+  LocalOrientationX = (gyroOut.roll * RAD_TO_DEG);
+  LocalOrientationY = (gyroOut.pitch * RAD_TO_DEG);
+  LocalOrientationZ = (gyroOut.yaw * RAD_TO_DEG);
+
+
+  FlightData currentData = {flightDurationTime, currentMode, gyro.getGyroX_rads(), -gyro.getGyroY_rads(), -gyro.getGyroZ_rads(), accel.getAccelX_mss(), accel.getAccelY_mss(), accel.getAccelZ_mss(), LocalOrientationX, LocalOrientationY, LocalOrientationZ, flightAlt, fcBatt, pyro1Cont, pyro2Cont};
+
+  sdFlightData = SD.open("flightTestData.csv"); 
+  if (sdFlightData) {
+    Serial.println("flightTestData.csv");
+    
+    // read from the file until there's nothing else in it:
+    while (sdFlightData.available()) {
+    	Serial.write(sdFlightData.read());
+    }
+    // close the file:
+    sdFlightData.close();
+  } else {
+  	// if the file didn't open, print an error:
+    Serial.println("error opening flightTestData.csv");
+  }
+
   lastMicros = currentMicros;
 }
