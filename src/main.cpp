@@ -8,7 +8,7 @@
 #include "Orientation.h"
 
 #include "SD.h"
-#include "sd_data.h"
+#include "structs.h"
 
 // ==============================
 // SDCARD & DATA LOG
@@ -16,13 +16,15 @@
 
 const int chipSelect = BUILTIN_SDCARD;
 
+const int spiFlashChipSelect = 1;
+
 File sdDataLog;
 
 double flightAlt;
 double fcBatt;
 
 // ==============================
-// SERVO & PYROS
+// SERVO | PYROS | LED
 // ==============================
 
 Servo servoZ;
@@ -30,10 +32,17 @@ Servo servoY;
 
 double SGR = 6; // the BPS Mount SGR is very high
 
+const int pyro1 = 2;
+const int pyro2 = 10;
+const int pyro3 = 29;
 const int pyro4 = 33;
 
 bool pyro1Cont;
 bool pyro2Cont;
+
+const int LEDR = 19;
+const int LEDG = 16;
+const int LEDB = 15;
 
 // ==============================
 // GYROSCOPES & ACCELEROMETERS
@@ -68,10 +77,15 @@ double gyroX, gyroY, gyroZ;
 
 double kp = 0.35;
 double ki = 0.095;
-double kd = 0.174;
+double kd = 0.174; // D gain = weird
 
-PID zAxis = {kp, ki, kd, 0};
-PID yAxis = {kp, ki, kd, 0};  
+double setpoint = 0;
+
+double deviationZ = LocalOrientationZ - setpoint;
+double deviationY = LocalOrientationY - setpoint;
+
+PID zAxis = {kp, ki, kd, setpoint};
+PID yAxis = {kp, ki, kd, setpoint};  
 double pwmZ, pwmY;
 double trueYOut, trueZOut;
 
@@ -132,14 +146,14 @@ void stabilize(double dt)
   pwmZ = zAxis.update(LocalOrientationZ, dt);
   pwmY = yAxis.update(LocalOrientationY, dt);
 
-  trueZOut = constrain((int)(pwmZ * RAD_TO_DEG * SGR), -30, 30);
-  trueYOut = constrain((int)(pwmY * RAD_TO_DEG * SGR), -30, 30);
+  trueZOut = constrain((pwmZ * SGR), -30, 30);
+  trueYOut = constrain((pwmY * SGR), -30, 30);
 
   servoZ.write(90 + trueZOut);
   servoY.write(90 + trueYOut);
 
-  // Serial.print("Z OUT"); Serial.print(90 + trueZOut); Serial.print("\t");
-  // Serial.print("Y OUT"); Serial.print(90 + trueYOut); Serial.print("\n");
+  Serial.print("Z OUT"); Serial.print(90 + trueZOut); Serial.print("\t");
+  Serial.print("Y OUT"); Serial.print(90 + trueYOut); Serial.print("\n");
 }
 
 bool initAccel()
@@ -157,7 +171,7 @@ void logHeaders(File dataLoggingFile)
   dataLoggingFile = SD.open("test.csv", FILE_WRITE);
   if (dataLoggingFile) 
   {
-    dataLoggingFile.print("Flight Time (Millis)"); dataLoggingFile.print(", "); dataLoggingFile.print("System State"); dataLoggingFile.print(", "); dataLoggingFile.print("Gyro X (rad/s)"); dataLoggingFile.print(", "); dataLoggingFile.print("Gyro Y (rad/s)"); dataLoggingFile.print(", "); dataLoggingFile.print("Gyro Z (rad/s)"); dataLoggingFile.print(", "); dataLoggingFile.print("Accel X (m/s^2)"); dataLoggingFile.print(", "); dataLoggingFile.print("Accel Y (m/s^2)"); dataLoggingFile.print(", "); dataLoggingFile.print("Accel Z (m/s^2)"); dataLoggingFile.print(", "); dataLoggingFile.print("Yaw (Deg)"); dataLoggingFile.print(", "); dataLoggingFile.print("Pitch (Deg)"); dataLoggingFile.print(", "); dataLoggingFile.print("Roll (Deg)"); dataLoggingFile.print(", "); dataLoggingFile.print("Altitude (Meters)"); dataLoggingFile.print(", "); dataLoggingFile.print("FC Batt"); dataLoggingFile.print(", "); dataLoggingFile.print("Pyro 1 Cont"); dataLoggingFile.print(", "); dataLoggingFile.print("Pyro 2 Cont"); dataLoggingFile.print(", "); dataLoggingFile.print("Data Error"); dataLoggingFile.println("");
+    dataLoggingFile.print("Flight Time (Millis)"); dataLoggingFile.print(", "); dataLoggingFile.print("System State"); dataLoggingFile.print(", "); dataLoggingFile.print("Gyro X (rad/s)"); dataLoggingFile.print(", "); dataLoggingFile.print("Gyro Y (rad/s)"); dataLoggingFile.print(", "); dataLoggingFile.print("Gyro Z (rad/s)"); dataLoggingFile.print(", "); dataLoggingFile.print("Accel X (m/s^2)"); dataLoggingFile.print(", "); dataLoggingFile.print("Accel Y (m/s^2)"); dataLoggingFile.print(", "); dataLoggingFile.print("Accel Z (m/s^2)"); dataLoggingFile.print(", "); dataLoggingFile.print("Yaw (Deg)"); dataLoggingFile.print(", "); dataLoggingFile.print("Pitch (Deg)"); dataLoggingFile.print(", "); dataLoggingFile.print("Roll (Deg)"); dataLoggingFile.print(", "); dataLoggingFile.print("TVC Z (Deg)"); dataLoggingFile.print(", "); dataLoggingFile.print("TVC Y (Deg)"); dataLoggingFile.print(", "); dataLoggingFile.print("Deviation Z (Deg)"); dataLoggingFile.print(", "); dataLoggingFile.print("Deviation Y (Deg)"); dataLoggingFile.print(", "); dataLoggingFile.print("Altitude (Meters)"); dataLoggingFile.print(", "); dataLoggingFile.print("FC Batt"); dataLoggingFile.print(", "); dataLoggingFile.print("Pyro 1 Cont"); dataLoggingFile.print(", "); dataLoggingFile.print("Pyro 2 Cont"); dataLoggingFile.print(", "); dataLoggingFile.print("Data Error"); dataLoggingFile.println("");
 
     dataLoggingFile.close();
   } else 
@@ -182,6 +196,10 @@ void logData(FlightData currentData)
   String yawString = String(currentData.yaw);
   String pitchString = String(currentData.pitch);
   String rollString = String(currentData.roll);
+  String tvcZString = String(trueZOut);
+  String tvcYString = String(trueYOut);
+  String deviationZString = String(deviationZ);
+  String deviationYString = String(deviationY);
   String altString = String(currentData.altitude);
   String fcBattString = String(currentData.battVoltage);
   String pyro1ContString = String(currentData.pyro1Cont);
@@ -190,7 +208,7 @@ void logData(FlightData currentData)
 
   if (sdDataLog) 
   {
-    sdDataLog.print(flightDurationString); sdDataLog.print(", "); sdDataLog.print(systemStateString); sdDataLog.print(", "); sdDataLog.print(gXString); sdDataLog.print(", "); sdDataLog.print(gYString); sdDataLog.print(", "); sdDataLog.print(gZString); sdDataLog.print(", "); sdDataLog.print(aXString); sdDataLog.print(", "); sdDataLog.print(aYString); sdDataLog.print(", "); sdDataLog.print(aZString); sdDataLog.print(", "); sdDataLog.print(yawString); sdDataLog.print(", "); sdDataLog.print(pitchString); sdDataLog.print(", "); sdDataLog.print(rollString); sdDataLog.print(", "); sdDataLog.print(altString); sdDataLog.print(", "); sdDataLog.print(fcBattString); sdDataLog.print(", "); sdDataLog.print(pyro1ContString); sdDataLog.print(", "); sdDataLog.print(pyro2ContString); sdDataLog.print(", "); sdDataLog.print(dataErrorString); sdDataLog.println("");
+    sdDataLog.print(flightDurationString); sdDataLog.print(", "); sdDataLog.print(systemStateString); sdDataLog.print(", "); sdDataLog.print(gXString); sdDataLog.print(", "); sdDataLog.print(gYString); sdDataLog.print(", "); sdDataLog.print(gZString); sdDataLog.print(", "); sdDataLog.print(aXString); sdDataLog.print(", "); sdDataLog.print(aYString); sdDataLog.print(", "); sdDataLog.print(aZString); sdDataLog.print(", "); sdDataLog.print(yawString); sdDataLog.print(", "); sdDataLog.print(pitchString); sdDataLog.print(", "); sdDataLog.print(rollString); sdDataLog.print(", "); sdDataLog.print(tvcZString); sdDataLog.print(", "); sdDataLog.print(tvcYString); sdDataLog.print(", "); sdDataLog.print(deviationZ); sdDataLog.print(", "); sdDataLog.print(deviationY); sdDataLog.print(", "); sdDataLog.print(altString); sdDataLog.print(", "); sdDataLog.print(fcBattString); sdDataLog.print(", "); sdDataLog.print(pyro1ContString); sdDataLog.print(", "); sdDataLog.print(pyro2ContString); sdDataLog.print(", "); sdDataLog.print(dataErrorString); sdDataLog.println("");
 
     sdDataLog.close();
   } else 
