@@ -166,6 +166,21 @@ bool initGyro()
   if(gyro.begin() < 0 || gyro.setRange(Bmi088Gyro::RANGE_1000DPS) < 0 || gyro.setOdr(Bmi088Gyro::ODR_2000HZ_BW_230HZ) < 0) return false;
 }
 
+void setupIMU () 
+{
+  if (initAccel() < 0) 
+  {
+    Serial.println("Accel Initialization Error");
+    while (1) {}
+  }
+  if (initGyro() < 0) 
+  {
+    Serial.println("Gyro Initialization Error");
+    while (1) {}
+  }
+  while(!gyro.getDrdyStatus()) {}
+}
+
 void logHeaders(File dataLoggingFile)
 {
   dataLoggingFile = SD.open("test.csv", FILE_WRITE);
@@ -234,20 +249,7 @@ void setup()
 
   status = accel.begin();
 
-  if (status < 0) 
-  {
-    Serial.println("Accel Initialization Error");
-    Serial.println(status);
-    while (1) {}
-  }
-  status = gyro.begin();
-  if (status < 0) 
-  {
-    Serial.println("Gyro Initialization Error");
-    Serial.println(status);
-    while (1) {}
-  }
-  while(!gyro.getDrdyStatus()) {}
+
 
   servoHome();
   delay(1000);
