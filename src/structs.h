@@ -1,11 +1,5 @@
 #include <Arduino.h>
 
-#define LOGIC_REF 3.3
-
-#define DIV_HIGH 1000000
-#define DIV_LOW 100000
-#define DIV_MULT ((LOGIC_REF / 1023) * (DIV_HIGH + DIV_LOW / DIV_LOW));
-
 #define EARTHG 9.807
 
 enum FlightMode
@@ -36,12 +30,16 @@ struct FlightData
   double pitch;
   double roll;
 
+  double tvcZ;
+  double tvcY;
+
+  double deviationZ;
+  double deviationY;
+
   double altitude;
   
   double battVoltage;
 
-  bool pyro1Cont;
-  bool pyro2Cont;
 
   int DATA_ERROR;
 };
